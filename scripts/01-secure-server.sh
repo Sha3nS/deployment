@@ -54,7 +54,7 @@ X11Forwarding no
 LoginGraceTime 30
 MaxAuthTries 3
 EOF
-systemctl restart sshd
+systemctl restart ssh
 
 echo -e "${BLUE}[5/6] Configuring firewall...${NC}"
 ufw default deny incoming
