@@ -23,14 +23,14 @@ tasks:
             case $i in
               1) echo "  [x] Task 1: Secure Server" ;;
               2) echo "  [x] Task 2: Install Docker" ;;
-              3) echo "  [x] Task 3: Install Coolify" ;;
+              3) echo "  [x] Task 3: Install Dokku" ;;
               4) echo "  [x] Task 4: Cloudflare Tunnel" ;;
             esac
           else
             case $i in
               1) echo "  [ ] Task 1: Secure Server" ;;
               2) echo "  [ ] Task 2: Install Docker" ;;
-              3) echo "  [ ] Task 3: Install Coolify" ;;
+              3) echo "  [ ] Task 3: Install Dokku" ;;
               4) echo "  [ ] Task 4: Cloudflare Tunnel" ;;
             esac
           fi
@@ -48,9 +48,24 @@ tasks:
     cmds:
       - task: 1-secure
       - task: 2-docker
-      - task: 3-coolify
+      - task: 3-dokku
       - task: 4-tunnel
       - task: status
+      - |
+        echo ""
+        echo "========================================"
+        echo "  Setup Complete!"
+        echo "========================================"
+        echo ""
+        echo "Your VPS is ready for deployments."
+        echo ""
+        echo "Static IP for Binance whitelist: $(curl -s ifconfig.me)"
+        echo ""
+        echo "Deploy your first app:"
+        echo "  1. dokku apps:create myapp"
+        echo "  2. On local: git remote add dokku dokku@$(curl -s ifconfig.me):myapp"
+        echo "  3. git push dokku main"
+        echo ""
 
   1-secure:
     desc: "Task 1: Secure server (SSH, firewall, fail2ban)"
@@ -80,20 +95,18 @@ tasks:
       - echo ""
       - echo "Task 2 complete!"
 
-  3-coolify:
-    desc: "Task 3: Install Coolify"
+  3-dokku:
+    desc: "Task 3: Install Dokku"
     status:
       - grep -q "^TASK_3_COMPLETE=1$" {{.STATE_FILE}} 2>/dev/null
     cmds:
       - echo "========================================"
-      - echo "  Task 3/4 - Install Coolify"
+      - echo "  Task 3/4 - Install Dokku"
       - echo "========================================"
-      - bash scripts/03-install-coolify.sh
+      - bash scripts/03-install-dokku.sh
       - echo "TASK_3_COMPLETE=1" >> {{.STATE_FILE}}
       - echo ""
       - echo "Task 3 complete!"
-      - echo ""
-      - 'echo "CHECKPOINT - Open http://$(curl -s ifconfig.me):8000 and create your admin account"'
 
   4-tunnel:
     desc: "Task 4: Setup Cloudflare Tunnel"
@@ -108,14 +121,116 @@ tasks:
       - echo ""
       - echo "Task 4 complete!"
 
-  lockdown:
-    desc: "Remove temporary port 8000 access (run after tunnel works)"
+  # Dokku helper commands
+  dokku-domain:
+    desc: "Set global domain for Dokku"
     cmds:
-      - ufw delete allow 8000
-      - echo "Port 8000 closed. Access Coolify via Cloudflare Tunnel only."
+      - |
+        echo "Current global domain:"
+        dokku domains:report --global
+        echo ""
+        read -p "Enter your domain (e.g., kmeow.trade): " DOMAIN
+        dokku domains:set-global "$DOMAIN"
+        echo "Global domain set to: $DOMAIN"
+
+  dokku-create:
+    desc: "Create a new Dokku app"
+    cmds:
+      - |
+        read -p "App name: " APPNAME
+        dokku apps:create "$APPNAME"
+        echo ""
+        echo "App created! Deploy with:"
+        echo "  git remote add dokku dokku@$(curl -s ifconfig.me):$APPNAME"
+        echo "  git push dokku main"
+
+  dokku-status:
+    desc: "Show all Dokku apps and their status"
+    cmds:
+      - echo "========================================"
+      - echo "  Dokku Apps"
+      - echo "========================================"
+      - dokku apps:list
+      - echo ""
+      - dokku ps:report 2>/dev/null || true
+
+  dokku-logs:
+    desc: "Show logs for an app"
+    cmds:
+      - |
+        read -p "App name: " APPNAME
+        dokku logs "$APPNAME" --tail
+
+  # Utility tasks
+  show-ports:
+    desc: "Show current listening ports and firewall rules"
+    cmds:
+      - echo "========================================"
+      - echo "  Listening Ports"
+      - echo "========================================"
+      - ss -tlnp | grep -v "127.0.0" || true
+      - echo ""
+      - echo "========================================"
+      - echo "  UFW Firewall Rules"
+      - echo "========================================"
+      - ufw status numbered
+
+  show-ip:
+    desc: "Show server IP (for Binance whitelist)"
+    cmds:
+      - |
+        echo ""
+        echo "========================================"
+        echo "  Server IP Address"
+        echo "========================================"
+        echo ""
+        IP=$(curl -s ifconfig.me)
+        echo "  Public IP: $IP"
+        echo ""
+        echo "  Use this IP for Binance API whitelist."
+        echo ""
 
   install-task:
     desc: Install Task (taskfile.dev) on this system
     cmds:
       - 'sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin'
       - echo "Task installed"
+
+  add-swap:
+    desc: "Add swap space (recommended for builds)"
+    cmds:
+      - |
+        if [ -f /swapfile ]; then
+          echo "Swap already exists:"
+          free -h | grep -i swap
+          exit 0
+        fi
+        echo "Creating 4GB swap file..."
+        fallocate -l 4G /swapfile
+        chmod 600 /swapfile
+        mkswap /swapfile
+        swapon /swapfile
+        echo '/swapfile none swap sw 0 0' >> /etc/fstab
+        echo 'vm.swappiness=10' >> /etc/sysctl.conf
+        sysctl -p
+        echo ""
+        echo "Swap added:"
+        free -h
+
+  lightsail-reminder:
+    desc: "Show required Lightsail firewall ports"
+    cmds:
+      - |
+        echo "========================================"
+        echo "  Lightsail Firewall Configuration"
+        echo "========================================"
+        echo ""
+        echo "Open these ports in Lightsail Console:"
+        echo "https://lightsail.aws.amazon.com -> Networking"
+        echo ""
+        echo "  Port  | Protocol | Purpose"
+        echo "  ------|----------|------------------"
+        echo "  22    | TCP      | SSH"
+        echo "  80    | TCP      | HTTP (Dokku)"
+        echo "  443   | TCP      | HTTPS"
+        echo ""

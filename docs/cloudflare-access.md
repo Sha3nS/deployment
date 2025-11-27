@@ -1,167 +1,90 @@
-# Cloudflare Access Setup Guide (Google Login)
+# Cloudflare Access Setup (Google Login)
 
-This guide shows you how to add Google OAuth login to your Coolify dashboard using Cloudflare Access (free).
+Protect your apps with Google authentication via Cloudflare Access.
 
-## Prerequisites
+## Overview
 
-- Cloudflare account (free)
-- Domain added to Cloudflare
-- Cloudflare Tunnel configured (see `04-setup-cloudflare-tunnel.sh`)
+Cloudflare Access adds authentication in front of your apps without modifying your code.
 
-## Step 1: Access Cloudflare Zero Trust
-
-1. Go to [Cloudflare Zero Trust Dashboard](https://one.dash.cloudflare.com)
-2. If first time, create a team name (e.g., "myteam")
-3. Select **Free plan** (up to 50 users)
-
-## Step 2: Add Google as Identity Provider
-
-### 2.1 Create Google OAuth Credentials
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com)
-2. Create a new project (or select existing)
-3. Go to **APIs & Services** → **Credentials**
-4. Click **Create Credentials** → **OAuth client ID**
-5. Configure consent screen if prompted:
-   - User Type: External
-   - App name: "Coolify Access"
-   - User support email: your email
-   - Developer contact: your email
-6. Create OAuth client ID:
-   - Application type: **Web application**
-   - Name: "Cloudflare Access"
-   - Authorized redirect URIs: (get from Cloudflare in next step)
-
-### 2.2 Configure in Cloudflare
-
-1. In Zero Trust Dashboard, go to **Settings** → **Authentication**
-2. Click **Add new** under Login methods
-3. Select **Google**
-4. Copy the **Redirect URL** shown
-5. Go back to Google Cloud Console and add this URL to "Authorized redirect URIs"
-6. Copy your **Client ID** and **Client Secret** from Google
-7. Paste them into Cloudflare
-8. Click **Save**
-
-## Step 3: Create Access Application
-
-1. Go to **Access** → **Applications**
-2. Click **Add an application**
-3. Select **Self-hosted**
-
-### Application Configuration
-
-| Field | Value |
-|-------|-------|
-| Application name | Coolify Dashboard |
-| Session duration | 24 hours |
-| Application domain | `coolify.yourdomain.com` |
-
-### Add Policy
-
-1. Policy name: "Authorized Users"
-2. Action: **Allow**
-3. Configure rules:
-
-**Include (who can access):**
-- Selector: **Emails**
-- Value: `your.email@gmail.com`
-
-Or for multiple users:
-- Selector: **Emails ending in**
-- Value: `@yourcompany.com`
-
-4. Click **Save**
-
-## Step 4: Test Access
-
-1. Open an incognito/private browser window
-2. Go to `https://coolify.yourdomain.com`
-3. You should see Cloudflare Access login page
-4. Click "Sign in with Google"
-5. Login with your authorized email
-6. You should now see Coolify login page
-
-## Step 5: Configure Additional Applications (Optional)
-
-You can protect other services the same way:
-
-| Application | Domain | Service URL |
-|-------------|--------|-------------|
-| Coolify | coolify.yourdomain.com | localhost:8000 |
-| Portainer | portainer.yourdomain.com | localhost:9000 |
-| Your App | app.yourdomain.com | localhost:3000 |
-
-## Security Best Practices
-
-### Restrict by Email
 ```
-Include:
-  Emails: user1@gmail.com, user2@gmail.com
+User → Cloudflare (login) → Tunnel → Dokku → Your App
 ```
 
-### Restrict by Email Domain
-```
-Include:
-  Emails ending in: @yourcompany.com
-```
+## Setup Steps
 
-### Require Specific Country
-```
-Include:
-  Emails: your.email@gmail.com
-Require:
-  Country: Singapore, United States
-```
+### 1. Go to Cloudflare Zero Trust
 
-### Add Additional Authentication
-You can require multiple factors:
-- Google login AND
-- One-time PIN to email AND
-- Hardware key (Yubikey)
+1. Open [Cloudflare Dashboard](https://dash.cloudflare.com)
+2. Click **Zero Trust** (left sidebar)
+3. If first time, set up your team name (e.g., `yourname`)
 
-## Troubleshooting
+### 2. Create Access Application
 
-### "Access Denied" Error
-- Check your email is in the policy's Include rules
-- Make sure Google is enabled as a login method
-- Check the application domain matches exactly
+1. **Access** → **Applications** → **Add an application**
+2. Select **Self-hosted**
+3. Configure:
+   - **Application name:** `My App`
+   - **Session duration:** 24 hours (or your preference)
+   - **Application domain:** `app.yourdomain.com`
 
-### Can't See Google Login Option
-- Verify Google is added in Settings → Authentication
-- Check Client ID and Secret are correct
-- Ensure redirect URI in Google matches Cloudflare's
+### 3. Add Policy
 
-### Tunnel Not Working
-- Check tunnel status: `sudo systemctl status cloudflared`
-- View logs: `sudo journalctl -u cloudflared -f`
-- Verify public hostname is configured in Cloudflare dashboard
+1. **Policy name:** `Allow My Email`
+2. **Action:** Allow
+3. **Include:**
+   - Selector: **Emails**
+   - Value: `your@email.com`
 
-## Cost
+Or for Google Workspace:
+   - Selector: **Emails ending in**
+   - Value: `@yourdomain.com`
 
-| Feature | Free Tier |
-|---------|-----------|
-| Users | Up to 50 |
-| Applications | Unlimited |
-| Tunnels | Unlimited |
-| Google OAuth | ✅ Included |
-| Email OTP | ✅ Included |
+### 4. Save
 
-You're unlikely to exceed the free tier for personal use.
+Click **Save** to create the application.
 
-## Quick Reference
+## Testing
+
+1. Open `https://app.yourdomain.com` in incognito
+2. You should see Cloudflare login page
+3. Login with Google
+4. You're redirected to your app
+
+## Multiple Apps
+
+Create separate Access Applications for each app you want to protect:
+
+| App | Domain | Protection |
+|-----|--------|------------|
+| Admin panel | admin.yourdomain.com | ✅ Protected |
+| Public site | www.yourdomain.com | ❌ Public |
+| API | api.yourdomain.com | ❌ Public (use API keys) |
+
+## Service Tokens (for APIs)
+
+For automated access (CI/CD, bots):
+
+1. **Access** → **Service Auth** → **Service Tokens**
+2. Create token
+3. Use in requests:
 
 ```bash
-# Check tunnel status
-sudo systemctl status cloudflared
-
-# View tunnel logs
-sudo journalctl -u cloudflared -f
-
-# Restart tunnel
-sudo systemctl restart cloudflared
-
-# Remove direct port access (after tunnel works)
-sudo ufw delete allow 8000
+curl -H "CF-Access-Client-Id: xxx" \
+     -H "CF-Access-Client-Secret: yyy" \
+     https://app.yourdomain.com/api
 ```
 
+## Bypass for Specific Paths
+
+To allow public access to specific paths (e.g., webhooks):
+
+1. Edit your Access Application
+2. Add another policy with **Action: Bypass**
+3. Add rule: **Path** contains `/webhook`
+
+## Tips
+
+- Use **Emails** selector for personal use
+- Use **Email domain** for teams
+- Set reasonable session duration (24h is good)
+- Test in incognito to verify protection

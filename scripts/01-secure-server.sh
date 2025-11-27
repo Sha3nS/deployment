@@ -44,9 +44,20 @@ else
     echo -e "${YELLOW}⚠ No keys/authorized_keys found in repo${NC}"
 fi
 
+# Also install for root (needed for Dokku)
+if [ "$TARGET_USER" != "root" ] && [ -f "$REPO_DIR/keys/authorized_keys" ]; then
+    mkdir -p /root/.ssh
+    chmod 700 /root/.ssh
+    cat "$REPO_DIR/keys/authorized_keys" >> /root/.ssh/authorized_keys
+    sort -u /root/.ssh/authorized_keys -o /root/.ssh/authorized_keys
+    chmod 600 /root/.ssh/authorized_keys
+    echo -e "${GREEN}✓ SSH key also installed for root (Dokku needs this)${NC}"
+fi
+
 echo -e "${BLUE}[4/6] Configuring SSH...${NC}"
 cat > /etc/ssh/sshd_config.d/99-security.conf << 'EOF'
-PermitRootLogin no
+# Allow root login with SSH key only (needed for Dokku git push)
+PermitRootLogin prohibit-password
 PasswordAuthentication no
 PubkeyAuthentication yes
 PermitEmptyPasswords no
@@ -60,11 +71,9 @@ echo -e "${BLUE}[5/6] Configuring firewall...${NC}"
 ufw default deny incoming
 ufw default allow outgoing
 ufw allow ssh
-ufw allow 80/tcp
-ufw allow 443/tcp
-ufw allow 8000/tcp  # Temporary: Coolify access before tunnel is setup
+ufw allow 80/tcp    # HTTP (Dokku/nginx)
+ufw allow 443/tcp   # HTTPS
 ufw --force enable
-echo -e "${YELLOW}Note: Port 8000 is open temporarily. Remove after Cloudflare Tunnel is working.${NC}"
 
 echo -e "${BLUE}[6/6] Configuring fail2ban...${NC}"
 cat > /etc/fail2ban/jail.local << 'EOF'
@@ -82,4 +91,3 @@ systemctl enable fail2ban
 systemctl restart fail2ban
 
 echo -e "${GREEN}✓ Server secured!${NC}"
-

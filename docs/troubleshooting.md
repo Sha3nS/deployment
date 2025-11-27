@@ -1,331 +1,248 @@
 # Troubleshooting Guide
 
-Common issues and solutions for VPS deployment.
+Common issues and solutions for Dokku deployments.
 
 ## SSH Issues
 
-### Can't connect via SSH
+### "Permission denied (publickey)"
 
-**Symptoms:**
-- Connection refused
-- Connection timed out
-- Permission denied
+Your SSH key isn't recognized.
 
-**Solutions:**
+```bash
+# Check your key is added to Dokku
+dokku ssh-keys:list
 
-1. **Check IP address is correct**
-   ```bash
-   ping YOUR_VPS_IP
-   ```
+# Add your key
+cat ~/.ssh/id_ed25519.pub | dokku ssh-keys:add admin
+```
 
-2. **Check SSH key**
-   ```bash
-   # List your keys
-   ls -la ~/.ssh/
-   
-   # Test with verbose mode
-   ssh -v ubuntu@YOUR_VPS_IP
-   ```
+### Can't SSH to server
 
-3. **Check firewall allows SSH**
-   ```bash
-   # On VPS (via console)
-   sudo ufw status
-   sudo ufw allow ssh
-   ```
+```bash
+# Try with verbose output
+ssh -v ubuntu@YOUR_IP
 
-4. **Check SSH service is running**
-   ```bash
-   # On VPS (via console)
-   sudo systemctl status sshd
-   sudo systemctl start sshd
-   ```
+# If port 22 is blocked, try from mobile network
+# Or use Lightsail browser console
+```
 
-### Locked out after SSH hardening
+## Deployment Issues
 
-If you disabled password auth without SSH key:
+### "No matching app"
 
-1. Use VPS provider's console/VNC access
-2. Edit SSH config:
-   ```bash
-   sudo nano /etc/ssh/sshd_config.d/99-security.conf
-   # Change: PasswordAuthentication yes
-   sudo systemctl restart sshd
-   ```
-3. Add your SSH key properly
-4. Re-disable password auth
+```bash
+# Check app exists
+dokku apps:list
 
----
+# Create if missing
+dokku apps:create myapp
+```
+
+### Build fails with OOM
+
+```bash
+# Add swap space
+sudo task add-swap
+
+# Check memory
+free -h
+```
+
+### "Could not detect buildpack"
+
+Dokku couldn't determine how to build your app.
+
+**For Python:**
+```bash
+# Ensure requirements.txt exists in repo root
+echo "flask==3.0.0" > requirements.txt
+```
+
+**For Node.js:**
+```bash
+# Ensure package.json exists in repo root
+```
+
+**Manual buildpack:**
+```bash
+dokku config:set myapp BUILDPACK_URL=https://github.com/heroku/heroku-buildpack-python
+```
+
+### Push rejected
+
+```bash
+# Check remote is correct
+git remote -v
+
+# Should show:
+# dokku    dokku@YOUR_IP:myapp (push)
+
+# Fix if wrong:
+git remote remove dokku
+git remote add dokku dokku@YOUR_IP:myapp
+```
+
+## Runtime Issues
+
+### App not responding
+
+```bash
+# Check if running
+dokku ps:report myapp
+
+# View logs
+dokku logs myapp --tail
+
+# Restart
+dokku ps:restart myapp
+```
+
+### Wrong port
+
+Dokku expects your app to listen on `PORT` environment variable.
+
+```python
+# Python
+port = int(os.environ.get('PORT', 5000))
+app.run(host='0.0.0.0', port=port)
+```
+
+```javascript
+// Node.js
+const port = process.env.PORT || 3000;
+app.listen(port);
+```
+
+### Environment variables not set
+
+```bash
+# Check current config
+dokku config:show myapp
+
+# Set variables
+dokku config:set myapp KEY=value
+
+# App auto-restarts after config change
+```
+
+## Domain Issues
+
+### "Bad gateway" or "502"
+
+```bash
+# Check app is running
+dokku ps:report myapp
+
+# Check domain is configured
+dokku domains:report myapp
+
+# Check Cloudflare Tunnel points to localhost:80
+```
+
+### Domain not working
+
+```bash
+# Add domain to app
+dokku domains:add myapp app.yourdomain.com
+
+# Verify
+dokku domains:report myapp
+```
+
+## Database Issues
+
+### Can't connect to database
+
+```bash
+# Check database exists
+dokku postgres:list
+
+# Check it's linked
+dokku postgres:info mydb
+
+# Re-link if needed
+dokku postgres:link mydb myapp
+```
+
+### DATABASE_URL not set
+
+```bash
+# Link creates it automatically
+dokku postgres:link mydb myapp
+
+# Verify
+dokku config:show myapp | grep DATABASE
+```
+
+## Cloudflare Tunnel Issues
+
+### Tunnel offline
+
+```bash
+# Check status
+sudo systemctl status cloudflared
+
+# View logs
+sudo journalctl -u cloudflared -f
+
+# Restart
+sudo systemctl restart cloudflared
+```
+
+### "Connection refused"
+
+Cloudflare can reach your server, but the app isn't responding.
+
+```bash
+# Test locally
+curl -I http://localhost:80
+
+# Check Dokku proxy
+dokku nginx:report myapp
+```
 
 ## Docker Issues
 
-### Docker command not found
-
-```bash
-# Reinstall Docker
-curl -fsSL https://get.docker.com | sudo sh
-```
-
-### Permission denied when running docker
+### "Permission denied" for docker
 
 ```bash
 # Add user to docker group
 sudo usermod -aG docker $USER
 
-# Logout and login again, or run:
+# Apply without logout
 newgrp docker
 ```
 
-### Docker daemon not running
+### Disk space full
 
 ```bash
-sudo systemctl start docker
-sudo systemctl enable docker
-```
-
----
-
-## Coolify Issues
-
-### Can't access Coolify web UI
-
-1. **Check Coolify is running**
-   ```bash
-   docker ps | grep coolify
-   ```
-
-2. **Check port 8000 is open**
-   ```bash
-   sudo ufw status
-   sudo ufw allow 8000
-   ```
-
-3. **Check Coolify logs**
-   ```bash
-   docker logs coolify -f
-   ```
-
-4. **Restart Coolify**
-   ```bash
-   cd /data/coolify/source
-   docker compose down
-   docker compose up -d
-   ```
-
-### Coolify build fails
-
-1. **Check disk space**
-   ```bash
-   df -h
-   ```
-
-2. **Check memory**
-   ```bash
-   free -h
-   ```
-
-3. **Clear Docker cache**
-   ```bash
-   docker system prune -a
-   ```
-
----
-
-## Cloudflare Tunnel Issues
-
-### Tunnel not connecting
-
-1. **Check cloudflared service**
-   ```bash
-   sudo systemctl status cloudflared
-   ```
-
-2. **View logs**
-   ```bash
-   sudo journalctl -u cloudflared -f
-   ```
-
-3. **Verify token is correct**
-   ```bash
-   # Reinstall with correct token
-   sudo cloudflared service uninstall
-   sudo cloudflared service install YOUR_CORRECT_TOKEN
-   ```
-
-### "Bad Gateway" error
-
-- Check the service URL is correct in Cloudflare dashboard
-- For Coolify: `http://localhost:8000` (not https)
-- Ensure the local service is running
-
-### DNS not resolving
-
-1. Check DNS records in Cloudflare dashboard
-2. Wait for propagation (up to 5 minutes)
-3. Clear local DNS cache:
-   ```bash
-   # Mac
-   sudo dscacheutil -flushcache
-   
-   # Linux
-   sudo systemd-resolve --flush-caches
-   ```
-
----
-
-## Firewall Issues
-
-### Can't access any services
-
-```bash
-# Check UFW status
-sudo ufw status
-
-# If locked out, disable temporarily
-sudo ufw disable
-
-# Re-enable with correct rules
-sudo ufw enable
-sudo ufw allow ssh
-sudo ufw allow 80
-sudo ufw allow 443
-```
-
-### Reset firewall to defaults
-
-```bash
-sudo ufw --force reset
-sudo ufw default deny incoming
-sudo ufw default allow outgoing
-sudo ufw allow ssh
-sudo ufw allow 80
-sudo ufw allow 443
-sudo ufw --force enable
-```
-
----
-
-## Performance Issues
-
-### High CPU usage
-
-```bash
-# Check what's using CPU
-htop
-# or
-top
-
-# Check Docker containers
-docker stats
-```
-
-### High memory usage
-
-```bash
-# Check memory
-free -h
-
-# Check per-process
-ps aux --sort=-%mem | head
-
-# Clear Docker unused resources
-docker system prune -a
-```
-
-### Disk full
-
-```bash
-# Check disk usage
+# Check disk
 df -h
-
-# Find large files
-du -sh /* | sort -h
 
 # Clean Docker
-docker system prune -a --volumes
+docker system prune -a -f
+docker volume prune -f
 
-# Clean apt cache
-sudo apt clean
+# Clean Dokku
+dokku cleanup
 ```
 
----
+## Quick Diagnostics
 
-## Useful Commands
+Run these commands to diagnose issues:
 
-### System Information
 ```bash
-# OS version
-cat /etc/os-release
+# System status
+free -h                    # Memory
+df -h                      # Disk space
+sudo task show-ports       # Listening ports
 
-# Uptime
-uptime
+# Dokku status
+dokku apps:list            # All apps
+dokku ps:report            # All processes
+dokku logs myapp           # App logs
 
-# Memory
-free -h
-
-# Disk
-df -h
-
-# CPU
-nproc
-lscpu
+# Network
+curl -I http://localhost:80    # Local HTTP
+sudo systemctl status cloudflared  # Tunnel
 ```
-
-### Service Management
-```bash
-# Check service status
-sudo systemctl status SERVICE_NAME
-
-# Start/stop/restart
-sudo systemctl start SERVICE_NAME
-sudo systemctl stop SERVICE_NAME
-sudo systemctl restart SERVICE_NAME
-
-# View logs
-sudo journalctl -u SERVICE_NAME -f
-```
-
-### Docker Commands
-```bash
-# List containers
-docker ps -a
-
-# View logs
-docker logs CONTAINER_NAME -f
-
-# Enter container
-docker exec -it CONTAINER_NAME bash
-
-# Restart container
-docker restart CONTAINER_NAME
-
-# Clean up
-docker system prune -a
-```
-
-### Network Diagnostics
-```bash
-# Check open ports
-sudo netstat -tlnp
-# or
-sudo ss -tlnp
-
-# Check firewall
-sudo ufw status verbose
-
-# Test connectivity
-curl -I https://google.com
-ping 8.8.8.8
-```
-
----
-
-## Getting Help
-
-If you're still stuck:
-
-1. **Check logs first** - Most issues are explained in logs
-2. **Search the error message** - Usually someone else had the same issue
-3. **Coolify Discord** - https://discord.gg/coolify
-4. **Cloudflare Community** - https://community.cloudflare.com
-

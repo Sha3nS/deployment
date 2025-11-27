@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Script 4: Setup Cloudflare Tunnel
+# Task 4: Setup Cloudflare Tunnel
 #
 
 set -e
@@ -39,7 +39,7 @@ echo ""
 echo "1. Go to: https://one.dash.cloudflare.com"
 echo "2. Navigate to: Networks → Tunnels → Create a tunnel"
 echo "3. Choose 'Cloudflared' as connector"
-echo "4. Name it (e.g., 'vps-tunnel')"
+echo "4. Name it (e.g., 'dokku-tunnel')"
 echo "5. Copy the token (starts with 'eyJ...')"
 echo ""
 
@@ -64,11 +64,15 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo ""
     systemctl status cloudflared --no-pager
     echo ""
-    echo -e "${YELLOW}Next steps:${NC}"
-    echo "1. In Cloudflare Dashboard → your tunnel → Public Hostname"
-    echo "2. Add: coolify.yourdomain.com → http://localhost:8000"
-    echo "3. Test: curl -I https://coolify.yourdomain.com"
-    echo "4. Then run: sudo ufw delete allow 8000"
+    echo -e "${YELLOW}Next steps - Add hostnames in Cloudflare Dashboard:${NC}"
+    echo ""
+    echo "  Subdomain              Service"
+    echo "  ─────────────────────  ─────────────────────"
+    echo "  app.yourdomain.com     http://localhost:80"
+    echo "  api.yourdomain.com     http://localhost:80"
+    echo ""
+    echo "All domains point to localhost:80 - Dokku routes by hostname."
+    echo ""
 else
     echo ""
     echo -e "${YELLOW}No problem! Run this script again when you have your token.${NC}"
@@ -79,8 +83,8 @@ fi
 
 echo ""
 echo -e "${BLUE}Cloudflare Tunnel provides:${NC}"
-echo "  ✓ No open ports needed"
+echo "  ✓ No open ports needed (can close 80/443 in firewall)"
 echo "  ✓ DDoS protection"
 echo "  ✓ Free SSL certificates"
 echo "  ✓ Hides your server IP"
-
+echo "  ✓ Cloudflare Access for authentication"
