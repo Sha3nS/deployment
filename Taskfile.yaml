@@ -196,6 +196,21 @@ tasks:
       - 'sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin'
       - echo "Task installed"
 
+  install-claude:
+    desc: Install Claude Code CLI
+    cmds:
+      - |
+        echo "Installing Claude Code CLI..."
+        if ! command -v node &> /dev/null; then
+          echo "Installing Node.js..."
+          curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+          apt-get install -y nodejs
+        fi
+        npm install -g @anthropic-ai/claude-code
+        echo ""
+        echo "Claude Code installed!"
+        echo "Run 'claude' to start."
+
   add-swap:
     desc: "Add swap space (recommended for builds)"
     cmds:
