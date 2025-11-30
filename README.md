@@ -27,7 +27,7 @@ Deploy apps with `git push`. Simple, stable, Heroku-like experience.
 
 ## Prerequisites
 
-- Fresh VPS (Ubuntu 22.04 or 24.04)
+- Fresh VPS (Ubuntu 22.04 LTS) - Note: Dokku doesn't support 24.04 yet
 - Domain pointed to Cloudflare
 - Cloudflare account (free)
 
@@ -152,6 +152,7 @@ deployment/
 │   ├── 03-install-dokku.sh     # Dokku installation
 │   └── 04-setup-cloudflare-tunnel.sh
 └── docs/
+    ├── dokku-guide.md          # Full Dokku reference
     ├── cloudflare-access.md    # Google Login setup
     └── troubleshooting.md
 ```
